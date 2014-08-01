@@ -1,5 +1,6 @@
 import serial
 from struct import unpack
+from functools import wraps
 
 class connection:
 	def __init__( self, com, baud_rate=19200 ):
@@ -16,96 +17,93 @@ class connection:
 			else:
 				self.port.write( chr(arg) )
 
-	def _rememberOn( self ):
-		self._writeCommand( "0xFE", "0x93", 1 )
 
-	def _rememberOff( self ):
-		self._writeCommand( "0xFE", "0x93", 0 )
+	# wrappers
+	def connectPort( func ):
+		@wraps( func )
+		def connect( self, *args, **kwargs ):
+			self.port.open()
+			retVal = func( self, *args, **kwargs )
+			self.port.close()
+			return retVal
+		return connect
 
-	
+	def rememberOption( func ):
+		@wraps( func )
+		def handleRemember( self, *args, **kwargs ):
+			remember = kwargs.pop( 'remember', False )
+			if remember:
+				# remember on
+				self._writeCommand( "0xFE", "0x93", 1 )
+			retVal = func( self, *args, **kwargs )
+			if remember:
+				# remember off
+				self._writeCommand( "0xFE", "0x93", 0 )
+			return retVal
+		return handleRemember
+
+
 	# display config functions
+	@connectPort
 	def getDisplaySize( self ):
-		self.port.open()
 		self.port.flushInput()
 		self._writeCommand( "0xFE", "0xB8" )
 		width = self.port.read()
 		height = self.port.read()
 		self.port.flushInput()
-		self.port.close()
 		return unpack( 'B', width )[0], unpack( 'B', height )[0]
 
+	@connectPort
 	def displayBacklightOn( self, minutes=0 ):
-		self.port.open()
 		self._writeCommand( "0xFE", "0x42", minutes )
-		self.port.close()
 
+	@connectPort
 	def displayBacklightOff( self ):
-		self.port.open()
 		self._writeCommand( "0xFE", "0x46" )
-		self.port.close()
 
-	def setDisplayColor( self, red, green, blue, remember=0 ):
-		self.port.open()
-		if remember:
-			self._rememberOn()
+	@connectPort
+	@rememberOption
+	def setDisplayColor( self, red, green, blue ):
 		self._writeCommand( "0xFE", "0x82", red, green, blue )
-		if remember:
-			self._rememberOff()
-		self.port.close()
 
-	def setDisplayBrightness( self, brightness, remember=0 ):
-		self.port.open()
-		if remember:
-			self._rememberOn()
+	@connectPort
+	@rememberOption
+	def setDisplayBrightness( self, brightness ):
 		self._writeCommand( "0xFE", "0x99", brightness )
-		if remember:
-			self._rememberOff()
-		self.port.close()
 	
-	def setDisplayContrast( self, contrast, remember=0 ):
-		self.port.open()
-		if remember:
-			self._rememberOn()
+	@connectPort
+	@rememberOption
+	def setDisplayContrast( self, contrast ):
 		self._writeCommand( "0xFE", "0x50", contrast )
-		if remember:
-			self._rememberOff()
-		self.port.close()
-	
+
+
 	# keypad config functions
+	@connectPort
 	def keypadBacklightOff( self, minutes=0 ):
-		self.port.open()
-		self._writeCommand( "0xFE", "0x9B" )
-		self.port.close()
+		self._writeCommand( "0xFE", "0x9B", minutes )
 	
-	def setKeypadBrightness( self, brightness, remember=0 ):
-		self.port.open()
-		if remember:
-			self._rememberOn()
+	@connectPort
+	@rememberOption
+	def setKeypadBrightness( self, brightness ):
 		self._writeCommand( "0xFE", "0x9C", brightness )
-		if remember:
-			self._rememberOff()
-		self.port.close()
+
 
 	# text and drawing
+	@connectPort
 	def clearScreen( self ):
-		self.port.open()
 		self._writeCommand( "0xFE", "0x58" )
-		self.port.close()
 
+	@connectPort
 	def writeString( self, string ):
-		self.port.open()
 		self.port.write( string )
-		self.port.close()
 
+	@connectPort
 	def setCursorPos( self, column, row ):
-		self.port.open()
 		self._writeCommand( "0xFE", "0x47", column, row )
-		self.port.close()
 
+	@connectPort
 	def setCursorCord( serf, x, y ):
-		self.port.open()
 		self._writeCommand( "0xFE", "0x79", x, y )
-		self.port.close()
 	
 		
 
